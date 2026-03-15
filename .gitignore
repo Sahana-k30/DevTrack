@@ -1,0 +1,16 @@
+/backend/node_modules
+/backend/.env
+/frontend/node_modules
+/frontend/.env
+#Ignore log files
+*.log
+# Ignore build files
+/build
+# ignore ide files
+/.idea
+# gnore os file
+.DS_Store
+# ignore vscode files
+/.vscode
+# ignore npm debug log
+npm-debug.log*
