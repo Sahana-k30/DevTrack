@@ -1,50 +1,55 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
+const TOKEN_KEY = 'devdragon_token';
+
+const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const token = localStorage.getItem('devtracker_token');
-    if (token) {
-      fetchUser(token);
-    } else {
+  const fetchUser = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) { setLoading(false); return; }
+
+    try {
+      const res = await axios.get(`${apiBase}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUser(res.data);
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      setUser(null);
+    } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchUser = async (token) => {
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUser(res.data);
-    } catch (err) {
-      console.error('Failed to fetch user:', err);
-      localStorage.removeItem('devtracker_token');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => { fetchUser(); }, [fetchUser]);
 
-  const login = (token) => {
-    localStorage.setItem('devtracker_token', token);
-    fetchUser(token);
-  };
+  const login = useCallback((token) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    fetchUser();
+  }, [fetchUser]);
 
-  const logout = () => {
-    localStorage.removeItem('devtracker_token');
+  const logout = useCallback(async () => {
+    localStorage.removeItem(TOKEN_KEY);
     setUser(null);
-  };
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, fetchUser }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
+}
+
+export { TOKEN_KEY };

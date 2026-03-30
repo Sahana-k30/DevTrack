@@ -1,3 +1,4 @@
+// models/GitHubData.js
 const mongoose = require('mongoose');
 
 const commitSchema = new mongoose.Schema({
@@ -5,8 +6,8 @@ const commitSchema = new mongoose.Schema({
   message: String,
   date: Date,
   repo: String,
-  additions: Number,
-  deletions: Number,
+  additions: { type: Number, default: 0 },
+  deletions: { type: Number, default: 0 },
 });
 
 const repoSchema = new mongoose.Schema({
@@ -14,9 +15,9 @@ const repoSchema = new mongoose.Schema({
   description: String,
   url: String,
   language: String,
-  stars: Number,
-  forks: Number,
-  isPrivate: Boolean,
+  stars: { type: Number, default: 0 },
+  forks: { type: Number, default: 0 },
+  isPrivate: { type: Boolean, default: false },
   createdAt: Date,
   updatedAt: Date,
   topics: [String],
@@ -25,25 +26,29 @@ const repoSchema = new mongoose.Schema({
 const prSchema = new mongoose.Schema({
   title: String,
   repo: String,
-  state: String, // open | closed | merged
+  state: String,
   createdAt: Date,
   mergedAt: Date,
-  additions: Number,
-  deletions: Number,
+  additions: { type: Number, default: 0 },
+  deletions: { type: Number, default: 0 },
 });
 
 const githubDataSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  username: { type: String, default: '' }, // ← was missing, caused save to silently drop it
   repos: [repoSchema],
   commits: [commitSchema],
   pullRequests: [prSchema],
-  languageDistribution: { type: Map, of: Number }, // { JavaScript: 45, Python: 30, ... }
-  weeklyCommits: [{ week: String, count: Number }],  // last 52 weeks
-  contributionStreak: { current: Number, longest: Number },
+  languageDistribution: { type: Map, of: Number, default: {} },
+  weeklyCommits: [{ week: String, count: { type: Number, default: 0 } }],
+  contributionStreak: {
+    current: { type: Number, default: 0 },
+    longest: { type: Number, default: 0 },
+  },
   totalCommits: { type: Number, default: 0 },
   totalPRs: { type: Number, default: 0 },
   totalStars: { type: Number, default: 0 },
   updatedAt: { type: Date, default: Date.now },
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('GitHubData', githubDataSchema);
