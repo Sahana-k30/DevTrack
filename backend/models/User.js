@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, default: '' },
     leetcodeUsername: { type: String, default: '' },
     codeforcesUsername: { type: String, default: '' },
+    lastRefreshed:       { type: Date, default: null },
     githubProfile: {
       username:     { type: String, default: '' },
       displayName:  { type: String, default: '' },

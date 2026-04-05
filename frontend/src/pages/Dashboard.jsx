@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { GitCommit, Code2, Terminal, BarChart2, Clock, TrendingUp, ArrowRight, Zap, User, Star } from 'lucide-react';
+import { GitCommit, Code2, Terminal, BarChart2, Clock, TrendingUp, ArrowRight, Zap, User, Star, RefreshCw } from 'lucide-react';
 
 const dashStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
@@ -22,6 +22,10 @@ const dashStyles = `
   @keyframes pulseRing {
     0%   { transform: scale(1); opacity: 1; }
     100% { transform: scale(1.6); opacity: 0; }
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
   }
 
   .db-fade-1 { animation: fadeUp 0.5s 0.0s ease both; }
@@ -90,6 +94,36 @@ const dashStyles = `
     background: #10b981;
     animation: pulseRing 1.5s ease-out infinite;
   }
+
+  .refresh-btn {
+    display: flex; align-items: center; gap: 7px;
+    border: 1.5px solid #e5e7eb; border-radius: 11px;
+    padding: 9px 16px; background: #fff;
+    font-size: 13px; font-weight: 600; color: #374151;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.18s;
+  }
+  .refresh-btn:hover:not(:disabled) {
+    border-color: #6366f1; color: #6366f1;
+    background: #f5f3ff;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.12);
+    transform: translateY(-1px);
+  }
+  .refresh-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .refresh-btn.refreshing { border-color: #6366f1; color: #6366f1; background: #f5f3ff; }
+
+  .spin { animation: spin 0.9s linear infinite; }
+
+  .refresh-toast {
+    position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+    padding: 12px 18px; border-radius: 12px;
+    font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+    animation: fadeUp 0.3s ease both;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toast-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .toast-error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 `;
 
 const GithubIcon = ({ size = 20 }) => (
@@ -194,16 +228,72 @@ const platforms = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [githubUser, setGithubUser] = useState(null);
+  const [githubUser, setGithubUser]     = useState(null);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [toast, setToast]               = useState(null); // { type: 'success'|'error', msg: string }
 
-  useEffect(() => {
-    api.get('/api/github/analytics')
-      .then(r => setGithubUser(r.data))
-      .catch(() => {});
+  // ── fetch GitHub summary for the user card ──
+  const fetchGithubData = useCallback(async () => {
+    try {
+      const r = await api.get('/api/github/analytics');
+      setGithubUser(r.data);
+    } catch (_) {}
   }, []);
 
+  useEffect(() => {
+    fetchGithubData();
+  }, [fetchGithubData]);
+
+  // ── auto-dismiss toast after 4 seconds ──
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // ── refresh all three platforms in parallel ──
+  const handleRefreshAll = async () => {
+  setRefreshing(true);
+  setToast(null);
+
+  try {
+    const profileRes = await api.get('/api/auth/me');
+    const profile = profileRes.data;
+
+    // Only call refresh for platforms the user has connected
+    const calls = [];
+    if (profile.githubProfile?.username)  calls.push(api.post('/api/github/refresh'));
+    if (profile.leetcodeUsername)         calls.push(api.post('/api/leetcode/refresh'));
+    if (profile.codeforcesUsername)       calls.push(api.post('/api/codeforces/refresh'));
+
+    if (calls.length === 0) {
+      setToast({ type: 'error', msg: '⚠️ No platforms connected yet.' });
+      return;
+    }
+
+    const results = await Promise.allSettled(calls);
+    await fetchGithubData();
+
+    const failed = results.filter(r => r.status === 'rejected').length;
+    setLastRefreshed(new Date());
+
+    if (failed === 0) {
+      setToast({ type: 'success', msg: '✅ All data refreshed successfully!' });
+    } else if (failed < results.length) {
+      setToast({ type: 'success', msg: `⚠️ Done — ${failed} platform(s) had errors` });
+    } else {
+      setToast({ type: 'error', msg: '❌ Refresh failed. Please try again.' });
+    }
+  } catch (_) {
+    setToast({ type: 'error', msg: '❌ Refresh failed. Please try again.' });
+  } finally {
+    setRefreshing(false);
+  }
+};
+
   const displayName = user?.name || user?.login || user?.username || 'Developer';
-  const avatarUrl = user?.avatarUrl || user?.avatar_url || null;
+  const avatarUrl   = user?.avatarUrl || user?.avatar_url || null;
   const githubLogin = user?.login || user?.username || null;
 
   return (
@@ -214,10 +304,31 @@ export default function Dashboard() {
 
         {/* ── WELCOME HEADER ── */}
         <div className="db-fade-1" style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span className="live-dot" />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#10b981', letterSpacing: '0.06em' }}>DASHBOARD</span>
+          {/* top row: live dot label + refresh button on the right */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="live-dot" />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#10b981', letterSpacing: '0.06em' }}>DASHBOARD</span>
+            </div>
+
+            {/* ── REFRESH BUTTON ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {lastRefreshed && !refreshing && (
+                <span style={{ fontSize: 11, color: '#aaa', fontWeight: 500 }}>
+                  Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                className={`refresh-btn${refreshing ? ' refreshing' : ''}`}
+                onClick={handleRefreshAll}
+                disabled={refreshing}
+              >
+                <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
+                {refreshing ? 'Refreshing…' : 'Refresh Data'}
+              </button>
+            </div>
           </div>
+
           <h1 className="db-display" style={{ fontSize: 'clamp(26px, 4vw, 38px)', fontWeight: 800, color: '#111', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
             Welcome back{displayName !== 'Developer' ? `, ${displayName.split(' ')[0]}` : ''}! 👋
           </h1>
@@ -254,8 +365,8 @@ export default function Dashboard() {
               {[
                 { label: 'Repositories', val: githubUser?.repos?.length ?? '—', c: '#3b82f6' },
                 { label: 'Total Commits', val: githubUser?.totalCommits ?? '—', c: '#10b981' },
-                { label: 'Total Stars', val: githubUser?.totalStars ?? '—', c: '#f97316' },
-                { label: 'Total PRs', val: githubUser?.totalPRs ?? '—', c: '#a855f7' },
+                { label: 'Total Stars',   val: githubUser?.totalStars   ?? '—', c: '#f97316' },
+                { label: 'Total PRs',     val: githubUser?.totalPRs     ?? '—', c: '#a855f7' },
               ].map(({ label, val, c }) => (
                 <div key={label} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: '14px 16px', backdropFilter: 'blur(4px)' }}>
                   <div className="db-display" style={{ fontSize: 22, fontWeight: 800, color: c, lineHeight: 1 }}>{val}</div>
@@ -280,9 +391,9 @@ export default function Dashboard() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
               {[
-                { label: 'GitHub', desc: 'Auto-synced every 6 hours', c: '#3b82f6', bg: '#eff6ff', bd: '#bfdbfe' },
-                { label: 'LeetCode', desc: 'Add username to connect', c: '#10b981', bg: '#ecfdf5', bd: '#a7f3d0' },
-                { label: 'Codeforces', desc: 'Add handle to connect', c: '#f97316', bg: '#fff7ed', bd: '#fed7aa' },
+                { label: 'GitHub',      desc: 'Auto-synced every 6 hours',  c: '#3b82f6', bg: '#eff6ff', bd: '#bfdbfe' },
+                { label: 'LeetCode',   desc: 'Add username to connect',     c: '#10b981', bg: '#ecfdf5', bd: '#a7f3d0' },
+                { label: 'Codeforces', desc: 'Add handle to connect',       c: '#f97316', bg: '#fff7ed', bd: '#fed7aa' },
               ].map(({ label, desc, c, bg, bd }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: bg, border: `1px solid ${bd}`, borderRadius: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -309,7 +420,6 @@ export default function Dashboard() {
         <div className="db-fade-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginBottom: 28 }}>
           {platforms.map(({ icon: Icon, path, accent, bg, border, btnBg, btnColor, title, subtitle, tag, tagColor, tagBg, tagBorder, description, highlights, glow }) => (
             <div key={path} className="platform-card">
-              {/* Glow blob */}
               <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: `radial-gradient(circle, ${glow}, transparent)`, pointerEvents: 'none' }} />
 
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, position: 'relative' }}>
@@ -321,7 +431,6 @@ export default function Dashboard() {
 
               <h3 className="db-display" style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4, position: 'relative' }}>{title}</h3>
               <p style={{ fontSize: 12, color: accent, fontWeight: 600, marginBottom: 14, letterSpacing: '0.02em' }}>{subtitle}</p>
-
               <p style={{ fontSize: 13.5, color: '#666', lineHeight: 1.68, marginBottom: 18, position: 'relative' }}>{description}</p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 22, position: 'relative' }}>
@@ -345,11 +454,11 @@ export default function Dashboard() {
           <h3 className="db-display" style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 16 }}>Quick Jump</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
             {[
-              { label: 'GitHub Analytics', path: '/github', accent: '#3b82f6', icon: GitCommit },
-              { label: 'LeetCode Insights', path: '/leetcode', accent: '#10b981', icon: Code2 },
-              { label: 'Codeforces Tracker', path: '/codeforces', accent: '#f97316', icon: Terminal },
-              { label: 'Skill Analysis', path: '/analytics', accent: '#a855f7', icon: BarChart2 },
-              { label: 'Dev Timeline', path: '/timeline', accent: '#ec4899', icon: Clock },
+              { label: 'GitHub Analytics',   path: '/github',     accent: '#3b82f6', icon: GitCommit },
+              { label: 'LeetCode Insights',  path: '/leetcode',   accent: '#10b981', icon: Code2     },
+              { label: 'Codeforces Tracker', path: '/codeforces', accent: '#f97316', icon: Terminal  },
+              { label: 'Skill Analysis',     path: '/analytics',  accent: '#a855f7', icon: BarChart2 },
+              { label: 'Dev Timeline',       path: '/timeline',   accent: '#ec4899', icon: Clock     },
             ].map(({ label, path, accent, icon: Icon }) => (
               <button key={path} className="quick-link" onClick={() => navigate(path)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -363,6 +472,14 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* ── TOAST NOTIFICATION ── */}
+      {toast && (
+        <div className={`refresh-toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+          {toast.msg}
+        </div>
+      )}
+
     </div>
   );
 }

@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -6,6 +7,7 @@ const session = require('express-session');
 const passport = require('passport');
 const connectDB = require('./config/db');
 const { connectRedis } = require('./config/redis');
+const { startCronJob } = require('./jobs/dataRefreshJob');  // line 1
 
 require('./config/passport');
 
@@ -51,6 +53,8 @@ const start = async () => {
     console.error('Server error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   });
+
+  startCronJob();
 
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

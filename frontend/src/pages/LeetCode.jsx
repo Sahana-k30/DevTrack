@@ -4,12 +4,20 @@ import StatCard from '../components/shared/StatCard';
 import { Code2, RefreshCw, Trophy, Flame } from 'lucide-react';
 
 export default function LeetCode() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [username, setUsername] = useState('');
+  const [data, setData]                   = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [username, setUsername]           = useState('');
   const [savingUsername, setSavingUsername] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]                 = useState('');
+  const [toast, setToast]                 = useState(null); // { type, msg }
+
+  // ── auto-dismiss toast ──
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const fetchData = async () => {
     try {
@@ -34,6 +42,7 @@ export default function LeetCode() {
     try {
       await api.post('/api/leetcode/username', { username: username.trim() });
       await fetchData();
+      setToast({ type: 'success', msg: '✅ LeetCode account connected!' });
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid username. Please check and try again.');
     } finally {
@@ -43,11 +52,17 @@ export default function LeetCode() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    setError('');
     try {
       await api.post('/api/leetcode/refresh');
-      await fetchData();
+      await fetchData(); // re-fetch so UI shows updated data
+      setToast({ type: 'success', msg: '✅ LeetCode data refreshed!' });
     } catch (err) {
-      setError('Failed to refresh data.');
+      if (err.response?.status === 429) {
+        setToast({ type: 'error', msg: '⏳ Too many requests — please wait a minute and try again.' });
+      } else {
+        setToast({ type: 'error', msg: err.response?.data?.message || '❌ Refresh failed.' });
+      }
     } finally {
       setRefreshing(false);
     }
@@ -63,6 +78,8 @@ export default function LeetCode() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── HEADER ── */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">LeetCode Analytics</h2>
@@ -80,7 +97,7 @@ export default function LeetCode() {
         )}
       </div>
 
-      {/* Username input */}
+      {/* ── USERNAME INPUT (shown when not connected) ── */}
       {(error === 'username_not_set' || !data) && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           <h3 className="text-white font-medium mb-2">Connect your LeetCode account</h3>
@@ -108,38 +125,47 @@ export default function LeetCode() {
         </div>
       )}
 
+      {/* ── MAIN DATA ── */}
       {data && (
         <>
+          {/* Stat Cards
+              NOTE: Your LeetCode schema stores:
+                - data.streak     → current streak (plain Number)
+                - data.maxStreak  → longest streak (plain Number)
+              NOT data.streak.current / data.streak.longest
+          */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard title="Total Solved" value={data.totalSolved} icon={Code2} color="indigo" />
-            <StatCard title="Ranking" value={data.ranking?.toLocaleString()} icon={Trophy} color="yellow" />
-            <StatCard title="Current Streak" value={`${data.streak?.current ?? 0} days`} icon={Flame} color="green" />
-            <StatCard title="Longest Streak" value={`${data.streak?.longest ?? 0} days`} icon={Flame} color="red" />
+            <StatCard title="Total Solved"    value={data.totalSolved}                    icon={Code2}  color="indigo" />
+            <StatCard title="Ranking"         value={data.ranking?.toLocaleString()}       icon={Trophy} color="yellow" />
+            <StatCard title="Current Streak"  value={`${data.streak    ?? 0} days`}        icon={Flame}  color="green"  />
+            <StatCard title="Longest Streak"  value={`${data.maxStreak ?? 0} days`}        icon={Flame}  color="red"    />
           </div>
 
-          {/* Difficulty Breakdown */}
+          {/* ── DIFFICULTY BREAKDOWN ── */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Difficulty Breakdown</h3>
             <div className="grid grid-cols-3 gap-4">
               {[
-                { label: 'Easy', solved: data.easySolved, total: data.easyTotal, color: 'text-green-400', bar: 'bg-green-500' },
+                { label: 'Easy',   solved: data.easySolved,   total: data.easyTotal,   color: 'text-green-400',  bar: 'bg-green-500'  },
                 { label: 'Medium', solved: data.mediumSolved, total: data.mediumTotal, color: 'text-yellow-400', bar: 'bg-yellow-500' },
-                { label: 'Hard', solved: data.hardSolved, total: data.hardTotal, color: 'text-red-400', bar: 'bg-red-500' },
+                { label: 'Hard',   solved: data.hardSolved,   total: data.hardTotal,   color: 'text-red-400',    bar: 'bg-red-500'    },
               ].map(({ label, solved, total, color, bar }) => (
                 <div key={label} className="text-center p-4 bg-gray-800 rounded-lg">
                   <p className={`text-2xl font-bold ${color}`}>{solved}</p>
                   <p className="text-xs text-gray-400 mt-1">{label}</p>
                   <p className="text-xs text-gray-600">/ {total}</p>
                   <div className="h-1.5 bg-gray-700 rounded-full mt-2">
-                    <div className={`h-1.5 rounded-full ${bar}`}
-                      style={{ width: `${total ? (solved / total) * 100 : 0}%` }} />
+                    <div
+                      className={`h-1.5 rounded-full ${bar}`}
+                      style={{ width: `${total ? (solved / total) * 100 : 0}%` }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Weekly Progress */}
+          {/* ── WEEKLY PROGRESS ── */}
           {data.weeklyProgress?.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h3 className="text-sm font-semibold text-white mb-4">Weekly Problems Solved</h3>
@@ -152,7 +178,7 @@ export default function LeetCode() {
                         {w.solved}
                       </div>
                       <div
-                        className="w-full bg-green-500 hover:bg-green-400 rounded-sm"
+                        className="w-full bg-green-500 hover:bg-green-400 rounded-sm transition-all"
                         style={{ height: `${Math.max(4, (w.solved / max) * 80)}px` }}
                       />
                     </div>
@@ -162,7 +188,22 @@ export default function LeetCode() {
             </div>
           )}
 
-          {/* Recent Submissions */}
+          {/* ── TOPIC WISE STATS ── */}
+          {data.topicWiseStats?.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-white mb-4">Topic Distribution</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {data.topicWiseStats.slice(0, 12).map((t, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                    <span className="text-xs text-gray-300 truncate">{t.topicName}</span>
+                    <span className="text-xs font-bold text-indigo-400 ml-2">{t.problemsSolved}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── RECENT SUBMISSIONS ── */}
           {data.recentSubmissions?.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h3 className="text-sm font-semibold text-white mb-4">Recent Accepted Submissions</h3>
@@ -178,6 +219,25 @@ export default function LeetCode() {
           )}
         </>
       )}
+
+      {/* ── TOAST ── */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+            padding: '12px 18px', borderRadius: 12,
+            fontSize: 13, fontWeight: 600,
+            boxShadow: '0 8px 28px rgba(0,0,0,0.2)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: toast.type === 'success' ? '#ecfdf5' : '#fef2f2',
+            color:      toast.type === 'success' ? '#065f46'  : '#991b1b',
+            border:     `1px solid ${toast.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
+
     </div>
   );
 }

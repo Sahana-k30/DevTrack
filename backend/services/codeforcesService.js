@@ -18,7 +18,7 @@ async function setCodeforcesUsername(userId, username) {
 async function updateCodeforcesData(userId, usernameOverride = null) {
   const user = await User.findById(userId);
   const username = usernameOverride || user.codeforcesUsername;
-  if (!username) throw new Error('Codeforces username not set');
+  if (!username) return null;
 
   // Fetch user info
   const [infoRes, ratingRes, submissionsRes] = await Promise.all([

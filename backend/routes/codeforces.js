@@ -36,6 +36,7 @@ router.get('/analytics', async (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     const data = await updateCodeforcesData(req.user._id);
+    if (!data) return res.status(400).json({ message: 'Codeforces handle not set. Add it in settings first.' });
     res.json({ message: 'Codeforces data refreshed', data });
   } catch (err) {
     res.status(500).json({ message: err.message });
