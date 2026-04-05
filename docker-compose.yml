@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  backend:
+    environment:
+      - NODE_ENV=docker
+    build: ./backend
+    container_name: devtrack-backend
+    ports:
+      - "5000:5000"
+    networks:
+      - devtrack-network
+
+  frontend:
+    build: ./frontend
+    container_name: devtrack-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    networks:
+      - devtrack-network
+
+networks:
+  devtrack-network:
+    driver: bridge
