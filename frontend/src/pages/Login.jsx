@@ -1,10 +1,23 @@
+import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 export default function Login() {
   const [params] = useSearchParams();
   const error = params.get('error');
 
+  // When the Login page loads (i.e. after logout or direct visit),
+  // wipe the JWT so there's no stale token floating around
+  useEffect(() => {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+  }, []);
+
   const handleLogin = () => {
+    // Also clear before redirecting — belt-and-suspenders
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+
+    // Backend will force GitHub's account picker via prompt=select_account
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/github`;
   };
 

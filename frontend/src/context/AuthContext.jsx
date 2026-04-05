@@ -35,8 +35,24 @@ export function AuthProvider({ children }) {
   }, [fetchUser]);
 
   const logout = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+
+    // Tell the backend to destroy the session + clear the cookie
+    try {
+      await axios.post(`${apiBase}/api/auth/logout`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // Even if the backend call fails, still clear locally
+    }
+
+    // Wipe the token and user state
     localStorage.removeItem(TOKEN_KEY);
     setUser(null);
+
+    // Redirect to login page — this also triggers Login.jsx's useEffect
+    // which wipes any remaining token before the user clicks login again
+    window.location.href = '/';
   }, []);
 
   return (

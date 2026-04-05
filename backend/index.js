@@ -7,7 +7,7 @@ const session = require('express-session');
 const passport = require('passport');
 const connectDB = require('./config/db');
 const { connectRedis } = require('./config/redis');
-const { startCronJob } = require('./jobs/dataRefreshJob');  // line 1
+const { startCronJob } = require('./jobs/dataRefreshJob');
 
 require('./config/passport');
 
@@ -31,15 +31,26 @@ const start = async () => {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Session only exists for the brief GitHub OAuth handshake.
+  // passport-github2 uses it to verify the OAuth state param.
+  // We destroy it right after the callback — all auth is JWT-based.
   app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 24, httpOnly: true, secure: false },
+    cookie: {
+      maxAge: 1000 * 60 * 10, // 10 min — only lives during OAuth handshake
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    },
   }));
 
   app.use(passport.initialize());
-  app.use(passport.session());
+  // passport.session() is intentionally NOT here.
+  // It was calling deserializeUser on every request, which restored
+  // the logged-in user from the session cookie even after logout.
+  // Since we use JWT for auth, sessions must not persist users.
 
   app.use('/api/auth',       authRoutes);
   app.use('/api/github',     githubRoutes);

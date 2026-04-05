@@ -2,18 +2,14 @@ const passport = require('passport');
 const { Strategy: GitHubStrategy } = require('passport-github2');
 const User = require('../models/User');
 
-passport.serializeUser((user, done) => {
-  done(null, user._id.toString());
-});
-
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await User.findById(id);
-    done(null, user || false);
-  } catch (err) {
-    done(err, null);
-  }
-});
+// ─── WHY serializeUser/deserializeUser are REMOVED ───────────────────────────
+// These two functions store the user in the server-side session (cookie-based).
+// Your app uses JWT — not sessions — for auth after the OAuth handshake.
+// Keeping them meant passport was silently restoring the last logged-in user
+// from the session cookie on every request, bypassing the logout entirely.
+// Without them, passport only authenticates during the GitHub callback,
+// then hands off to JWT for everything else. This is the correct flow.
+// ─────────────────────────────────────────────────────────────────────────────
 
 passport.use(
   new GitHubStrategy(
@@ -22,6 +18,10 @@ passport.use(
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
       callbackURL:  process.env.GITHUB_CALLBACK_URL,
       scope: ['user:email', 'read:user', 'repo'],
+      // Forces GitHub to show account picker every time instead of
+      // silently reusing the last authorized account in the browser
+      authorizationURL: 'https://github.com/login/oauth/authorize',
+      tokenURL: 'https://github.com/login/oauth/access_token',
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -35,9 +35,9 @@ passport.use(
           { githubId: profile.id },
           {
             $set: {
-              githubId:         profile.id,
+              githubId:          profile.id,
               githubAccessToken: accessToken,
-              email:            primaryEmail,
+              email:             primaryEmail,
               githubProfile: {
                 username:    profile.username,
                 displayName: profile.displayName || profile.username,
@@ -53,7 +53,7 @@ passport.use(
               },
             },
           },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         return done(null, user);
