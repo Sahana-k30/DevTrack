@@ -10,6 +10,7 @@ import LeetCode    from './pages/LeetCode';
 import Codeforces  from './pages/Codeforces';
 import Analytics   from './pages/Analytics';
 import Timeline    from './pages/Timeline';
+import CompareProfiles from './pages/CompareProfiles';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="codeforces" element={<Codeforces />} />
             <Route path="analytics"  element={<Analytics />} />
             <Route path="timeline"   element={<Timeline />} />
+            <Route path="compare"    element={<CompareProfiles />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

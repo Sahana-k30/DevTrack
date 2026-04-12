@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Github, Code2, Terminal, Clock, BarChart2
+  LayoutDashboard, Github, Code2, Terminal, Clock, BarChart2, Scale
 } from 'lucide-react';
 
 const links = [
@@ -10,6 +10,7 @@ const links = [
   { to: '/codeforces', icon: Terminal, label: 'Codeforces' },
   { to: '/timeline', icon: Clock, label: 'Timeline' },
   { to: '/analytics', icon: BarChart2, label: 'Analytics' },
+  { to: '/compare', icon: Scale, label: 'Compare' },
 ];
 
 export default function Sidebar() {
